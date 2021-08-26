@@ -1,60 +1,60 @@
-/// ## Bitvector implemented with [Packed SIMD 2](https://github.com/rust-lang/packed_simd)
-///
-/// Bitvector represents numbers by the position of bits. For example, for the set $\{1,3,5\}$, we
-/// can represent it by a just a byte `010101000` -- the most left (high) bit represent if `0`
-/// exits in this set or not, the second bit represent `1` ...
-///
-/// Bitvector is usually used in the algorithm which requires many set intersection/union operations,
-/// such like graph mining, formal concept analysis. Set operations in bitvector can be implemented
-/// with simple and/or/xor operations so it is much faster than "normal" version of `HashSet`.
-///
-/// Furthermore, as SIMD introduces the ability for handling multiple data with a single instruction,
-/// set operations can be even faster with SIMD enabled.
-///
-/// However, implementation with SIMD in Rust is not really an easy task -- now only low-level API
-/// is provided through [core::arch](https://doc.rust-lang.org/core/arch/index.html). It requires
-/// many `cfg(target_arch)`s (i.e. different implement on different arch) and 
-/// assembly-like unsafe function calls. 
-///
-/// Packed SIMD provided a much better API for users. With this crate, you can just treat SIMD
-/// operations as an operation on slices. Packed SIMD wraps all the low-level details for you -- no
-/// arch-specified code, no unsafe, just do what you've done on normal integer/floats. 
-///
-/// This crate uses Packed SIMD 2 to implement a basic bitvector.
-///
-/// ### Usage
-///
-/// ```rust
-/// use bitvector_simd::BitVector;
-///
-/// let mut bitvector = BitVector::ones(1_000); //create a set containing 0 ..= 999
-/// bitvector.set(1_999, true); // add 1999 to the set, bitvector will be automatically expanded
-/// bitvector.set(500, false); // delete 500 from the set
-/// // now the set contains: 0 ..=499, 501..=1999
-/// assert_eq!(bitvector.get(500), Some(false)); 
-/// assert_eq!(bitvector.get(5_000), None);
-/// // When try to get number larger than current bitvector, it will return `None`.
-/// // of course if you don't care, you can just do:
-/// assert_eq!(bitvector.get(5_000).unwrap_or(false), false);
-///
-/// let bitvector2 = BitVector::zeros(2000); // create a set containing 0 ..=1999
-///
-/// let bitvector3 = bitvector.and_cloned(&bitvector2);
-/// // and/or/xor/not operation is provided.
-/// // these APIs usually have 2 version:
-/// // `.and` consume the inputs and `.and_clone()` accepts reference and will do clone on inputs. 
-/// let bitvector4 = bitvector & bitvector2;
-/// // ofcourse you can just use bit-and operator on bitvectors, it will also consumes the inputs.
-/// assert_eq!(bitvector3, bitvector4);
-/// ```
-///
-/// ## Performance
-///
-/// run `cargo bench` to see the benchmarks on your device.
-///
-/// Benchmarks on author's environment show that it does not outperformance existing bitvector
-/// libraries (too much). It is just OK to use existing ones such like [bit_vec](https://docs.rs/bit-vec/0.6.3/bit_vec/).
-///
+//! ## Bitvector implemented with [Packed SIMD 2](https://github.com/rust-lang/packed_simd)
+//!
+//! Bitvector represents numbers by the position of bits. For example, for the set $\{1,3,5\}$, we
+//! can represent it by a just a byte `010101000` -- the most left (high) bit represent if `0`
+//! exits in this set or not, the second bit represent `1` ...
+//!
+//! Bitvector is usually used in the algorithm which requires many set intersection/union operations,
+//! such like graph mining, formal concept analysis. Set operations in bitvector can be implemented
+//! with simple and/or/xor operations so it is much faster than "normal" version of `HashSet`.
+//!
+//! Furthermore, as SIMD introduces the ability for handling multiple data with a single instruction,
+//! set operations can be even faster with SIMD enabled.
+//!
+//! However, implementation with SIMD in Rust is not really an easy task -- now only low-level API
+//! is provided through [core::arch](https://doc.rust-lang.org/core/arch/index.html). It requires
+//! many `cfg(target_arch)`s (i.e. different implement on different arch) and 
+//! assembly-like unsafe function calls. 
+//!
+//! Packed SIMD provided a much better API for users. With this crate, you can just treat SIMD
+//! operations as an operation on slices. Packed SIMD wraps all the low-level details for you -- no
+//! arch-specified code, no unsafe, just do what you've done on normal integer/floats. 
+//!
+//! This crate uses Packed SIMD 2 to implement a basic bitvector.
+//!
+//! ### Usage
+//!
+//! ```rust
+//! use bitvector_simd::BitVector;
+//!
+//! let mut bitvector = BitVector::ones(1_000); //create a set containing 0 ..= 999
+//! bitvector.set(1_999, true); // add 1999 to the set, bitvector will be automatically expanded
+//! bitvector.set(500, false); // delete 500 from the set
+//! // now the set contains: 0 ..=499, 501..=1999
+//! assert_eq!(bitvector.get(500), Some(false)); 
+//! assert_eq!(bitvector.get(5_000), None);
+//! // When try to get number larger than current bitvector, it will return `None`.
+//! // of course if you don't care, you can just do:
+//! assert_eq!(bitvector.get(5_000).unwrap_or(false), false);
+//!
+//! let bitvector2 = BitVector::zeros(2000); // create a set containing 0 ..=1999
+//!
+//! let bitvector3 = bitvector.and_cloned(&bitvector2);
+//! // and/or/xor/not operation is provided.
+//! // these APIs usually have 2 version:
+//! // `.and` consume the inputs and `.and_clone()` accepts reference and will do clone on inputs. 
+//! let bitvector4 = bitvector & bitvector2;
+//! // ofcourse you can just use bit-and operator on bitvectors, it will also consumes the inputs.
+//! assert_eq!(bitvector3, bitvector4);
+//! ```
+//!
+//! ## Performance
+//!
+//! run `cargo bench` to see the benchmarks on your device.
+//!
+//! Benchmarks on author's environment show that it does not outperformance existing bitvector
+//! libraries (too much). It is just OK to use existing ones such like [bit_vec](https://docs.rs/bit-vec/0.6.3/bit_vec/).
+
 use std::{
     fmt::Display,
     ops::{BitAnd, BitOr, BitXor, Index, Not},
@@ -277,13 +277,16 @@ impl BitVector {
     /// difference operation
     ///
     /// `A.difference(B)` calculates `A\B`, e.g.
+    ///
+    /// ```text
     /// A = [1,2,3], B = [2,4,5]
-    ///
     /// A\B = [1,3]
-    ///
+    /// ```
     /// also notice that 
     ///
+    /// ```text
     /// A.difference(B) & B.difference(A) == A ^ B
+    /// ```
     pub fn difference(self, other: Self) -> Self {
         self.and(other.not())
     }
