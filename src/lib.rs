@@ -1,3 +1,60 @@
+/// ## Bitvector implemented with [Packed SIMD 2](https://github.com/rust-lang/packed_simd)
+///
+/// Bitvector represents numbers by the position of bits. For example, for the set $\{1,3,5\}$, we
+/// can represent it by a just a byte `010101000` -- the most left (high) bit represent if `0`
+/// exits in this set or not, the second bit represent `1` ...
+///
+/// Bitvector is usually used in the algorithm which requires many set intersection/union operations,
+/// such like graph mining, formal concept analysis. Set operations in bitvector can be implemented
+/// with simple and/or/xor operations so it is much faster than "normal" version of `HashSet`.
+///
+/// Furthermore, as SIMD introduces the ability for handling multiple data with a single instruction,
+/// set operations can be even faster with SIMD enabled.
+///
+/// However, implementation with SIMD in Rust is not really an easy task -- now only low-level API
+/// is provided through [core::arch](https://doc.rust-lang.org/core/arch/index.html). It requires
+/// many `cfg(target_arch)`s (i.e. different implement on different arch) and 
+/// assembly-like unsafe function calls. 
+///
+/// Packed SIMD provided a much better API for users. With this crate, you can just treat SIMD
+/// operations as an operation on slices. Packed SIMD wraps all the low-level details for you -- no
+/// arch-specified code, no unsafe, just do what you've done on normal integer/floats. 
+///
+/// This crate uses Packed SIMD 2 to implement a basic bitvector.
+///
+/// ### Usage
+///
+/// ```rust
+/// use bitvector_simd::BitVector;
+///
+/// let mut bitvector = BitVector::ones(1_000); //create a set containing 0 ..= 999
+/// bitvector.set(1_999, true); // add 1999 to the set, bitvector will be automatically expanded
+/// bitvector.set(500, false); // delete 500 from the set
+/// // now the set contains: 0 ..=499, 501..=1999
+/// assert_eq!(bitvector.get(500), Some(false)); 
+/// assert_eq!(bitvector.get(5_000), None);
+/// // When try to get number larger than current bitvector, it will return `None`.
+/// // of course if you don't care, you can just do:
+/// assert_eq!(bitvector.get(5_000).unwrap_or(false), false);
+///
+/// let bitvector2 = BitVector::zeros(2000); // create a set containing 0 ..=1999
+///
+/// let bitvector3 = bitvector.and_cloned(&bitvector2);
+/// // and/or/xor/not operation is provided.
+/// // these APIs usually have 2 version:
+/// // `.and` consume the inputs and `.and_clone()` accepts reference and will do clone on inputs. 
+/// let bitvector4 = bitvector & bitvector2;
+/// // ofcourse you can just use bit-and operator on bitvectors, it will also consumes the inputs.
+/// assert_eq!(bitvector3, bitvector4);
+/// ```
+///
+/// ## Performance
+///
+/// run `cargo bench` to see the benchmarks on your device.
+///
+/// Benchmarks on author's environment show that it does not outperformance existing bitvector
+/// libraries (too much). It is just OK to use existing ones such like [bit_vec](https://docs.rs/bit-vec/0.6.3/bit_vec/).
+///
 use std::{
     fmt::Display,
     ops::{BitAnd, BitOr, BitXor, Index, Not},
@@ -16,6 +73,10 @@ type BitContainer = u64x8;
 //#[cfg(target_pointer_width = "32")]
 //type BitContainer = u32x16;
 
+/// Representation of a BitVector
+///
+/// see the module's document for examples and details.
+///
 #[derive(Debug, Clone)]
 pub struct BitVector {
     // internal representation of bitvector
@@ -103,6 +164,7 @@ fn set_bit(flag: bool, bytes: u64, offset: u32) -> u64 {
 }
 
 impl BitVector {
+    /// Create a empty bitvector with `nbits` initial elements.
     pub fn zeros(nbits: usize) -> Self {
         let (len, bytes, bits) = bit_to_len(nbits);
         let len = if bytes > 0 || bits > 0 { len + 1 } else { len };
@@ -113,6 +175,7 @@ impl BitVector {
         }
     }
 
+    /// Create a bitvector containing all 0 .. nbits elements.
     pub fn ones(nbits: usize) -> Self {
         let (len, bytes, bits) = bit_to_len(nbits);
         let mut storage = (0..len)
@@ -133,6 +196,13 @@ impl BitVector {
         }
     }
 
+    /// max number of elements that this bitvector can have
+    /// 
+    /// To get the number of elements, use `count`
+    pub fn capacity(&self) -> usize { self.nbits }
+
+    /// Shrink the vector to `length`. All elements between [length .. self.capacity()] will be removed.
+    /// Panic if given `length` larger than current length.
     pub fn shrink_to(&mut self, length: usize) {
         if length < self.nbits {
             let (i, bytes, bits) = bit_to_len(length);
@@ -153,9 +223,13 @@ impl BitVector {
             }
             self.storage = storage;
             self.nbits = length;
+        } else {
+            panic!("require shrinked size {} < current size {}", length, self.nbits);
         }
     }
 
+    /// Remove or add `index` to the set.
+    /// If index > self.capacity, the bitvector will be expanded to `index`.
     pub fn set(&mut self, index: usize, flag: bool) {
         let (i, bytes, bits) = bit_to_len(index);
         if self.nbits <= index {
@@ -169,6 +243,10 @@ impl BitVector {
         self.storage[i] = self.storage[i].replace(bytes, byte);
     }
 
+    /// Check if `index` exists in current set.
+    /// If exists, return `Some(true)`
+    /// If index < current.capacity and element doesn't exist, return `Some(false)`.
+    /// If index >= current.capacity, return `None`.
     pub fn get(&self, index: usize) -> Option<bool> {
         if self.nbits <= index {
             None
@@ -178,6 +256,11 @@ impl BitVector {
         }
     }
 
+    /// Directly return a `bool` instead of an `Option`
+    /// If exists, return `true`
+    /// If doesn't exist or index >= current.capacity, retun `false`
+    ///
+    /// equals to `self.get(index).unwrap_or(false)`
     pub fn get_unchecked(&self, index: usize) -> bool {
         if self.nbits <= index {
             panic!("index out of bounds {} > {}", index, self.nbits);
@@ -191,6 +274,16 @@ impl BitVector {
     impl_operation!(or, or_cloned, |);
     impl_operation!(xor, xor_cloned, ^);
 
+    /// difference operation
+    ///
+    /// `A.difference(B)` calculates `A\B`, e.g.
+    /// A = [1,2,3], B = [2,4,5]
+    ///
+    /// A\B = [1,3]
+    ///
+    /// also notice that 
+    ///
+    /// A.difference(B) & B.difference(A) == A ^ B
     pub fn difference(self, other: Self) -> Self {
         self.and(other.not())
     }
@@ -201,6 +294,10 @@ impl BitVector {
     }
 
     // not should make sure bits > nbits is 0
+    /// inverse every bits in the vector.
+    ///
+    /// If your bitvector have capacity `1_000` and contains `[1,5]`,
+    /// after inverse it will contains `0, 2..=4, 6..=999`
     pub fn not(self) -> Self {
         let (i, bytes, bits) = bit_to_len(self.nbits);
         let mut storage = self.storage.into_iter().map(|x| !x).collect::<Vec<_>>();
@@ -225,6 +322,7 @@ impl BitVector {
         }
     }
 
+    /// Count the number of elements existing in this bitvector.
     pub fn count(&self) -> usize {
         self.storage
             .iter()
@@ -232,20 +330,32 @@ impl BitVector {
             .sum::<u64>() as usize
     }
 
+    /// return true if contains at least 1 element
     pub fn any(&self) -> bool {
         self.storage
             .iter()
             .any(|x| x.count_ones().max_element() > 0)
     }
 
+    /// return true if contains self.capacity elements
     pub fn all(&self) -> bool {
         self.count() == self.nbits
     }
 
+    /// return true if set is empty
     pub fn none(&self) -> bool {
         !self.any()
     }
 
+    /// return true if set is empty.
+    /// totally the same with `self.none()`
+    pub fn is_empty(&self) -> bool {
+        !self.any()
+    }
+
+    /// only compare the first `bits` instead of the whole bitvector.
+    /// 
+    /// require self and other are both no shorter than `bits`.
     pub fn eq_left(&self, other: &Self, bits: usize) -> bool {
         assert!(self.nbits >= bits && other.nbits >= bits);
         let (i, bytes, bits) = bit_to_len(bits);
