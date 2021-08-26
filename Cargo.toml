@@ -1,0 +1,18 @@
+[package]
+name = "bitvector_simd"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+packed_simd = { version = "0.3.4", package = "packed_simd_2" }
+
+[dev-dependencies]
+criterion = "0.3"
+bit-vec = "0.6"
+bitvec = "0.22"
+
+[[bench]]
+name = "comparison"
+harness = false
