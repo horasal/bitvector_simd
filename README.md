@@ -1,6 +1,6 @@
 ## bitvector\_simd
 
-[![creates.io(https://img.shields.io/crates/v/bitvector-simd.svg)](https://crates.io/crates/bitvector_simd)
+[![creates.io](https://img.shields.io/crates/v/bitvector-simd.svg)](https://crates.io/crates/bitvector_simd)
 [![docs.rs](https://docs.rs/bitvector_simd/badge.svg?version=0.1.1)](https://docs.rs/bitvector_simd/0.1.1/bitvector_simd/)
 
 
