@@ -231,7 +231,6 @@ impl BitVector {
             if b {
                 current_slice[nbits / 64] |= 1 << (u64::BITS - (nbits%64) as u32 - 1);
             }
-            println!("{}, {:?}", nbits, current_slice);
             nbits += 1;
             if nbits % 512 == 0 {
                 storage.push(BitContainer::from_slice_unaligned(&current_slice));
@@ -487,7 +486,6 @@ impl BitVector {
             .zip(other.storage.iter())
             .take(i)
             .all(|(a, b)| a == b);
-        println!("{}", r);
         if bytes > 0 || bits > 0 {
             if let (Some(a), Some(b)) = (self.storage.get(i), other.storage.get(i)) {
                 r && (0..bytes).all(|index| a.extract(index) == b.extract(index))
@@ -499,6 +497,12 @@ impl BitVector {
         } else {
             r
         }
+    }
+}
+
+impl<I:Iterator<Item=bool>> From<I> for BitVector {
+    fn from(i: I) -> Self {
+        Self::from_iterator(i)
     }
 }
 
@@ -616,8 +620,6 @@ fn test_bit_vec_eqleft() {
     let bitvec2 = BitVector::ones(1000);
     assert!(bitvec.eq_left(&bitvec2, 1000));
     bitvec.set(900, false);
-    println!("{}", bitvec);
-    println!("{}", bitvec2);
     assert!(bitvec.eq_left(&bitvec2, 900));
     assert!(bitvec.eq_left(&bitvec2, 800));
     assert!(bitvec.eq_left(&bitvec2, 900));
