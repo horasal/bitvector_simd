@@ -13,12 +13,12 @@
 //!
 //! However, implementation with SIMD in Rust is not really an easy task -- now only low-level API
 //! is provided through [core::arch](https://doc.rust-lang.org/core/arch/index.html). It requires
-//! many `cfg(target_arch)`s (i.e. different implement on different arch) and 
-//! assembly-like unsafe function calls. 
+//! many `cfg(target_arch)`s (i.e. different implement on different arch) and
+//! assembly-like unsafe function calls.
 //!
 //! Packed SIMD provided a much better API for users. With this crate, you can just treat SIMD
 //! operations as an operation on slices. Packed SIMD wraps all the low-level details for you -- no
-//! arch-specified code, no unsafe, just do what you've done on normal integer/floats. 
+//! arch-specified code, no unsafe, just do what you've done on normal integer/floats.
 //!
 //! This crate uses Packed SIMD 2 to implement a basic bitvector.
 //!
@@ -31,7 +31,7 @@
 //! bitvector.set(1_999, true); // add 1999 to the set, bitvector will be automatically expanded
 //! bitvector.set(500, false); // delete 500 from the set
 //! // now the set contains: 0 ..=499, 501..=1999
-//! assert_eq!(bitvector.get(500), Some(false)); 
+//! assert_eq!(bitvector.get(500), Some(false));
 //! assert_eq!(bitvector.get(5_000), None);
 //! // When try to get number larger than current bitvector, it will return `None`.
 //! // of course if you don't care, you can just do:
@@ -42,7 +42,7 @@
 //! let bitvector3 = bitvector.and_cloned(&bitvector2);
 //! // and/or/xor/not operation is provided.
 //! // these APIs usually have 2 version:
-//! // `.and` consume the inputs and `.and_clone()` accepts reference and will do clone on inputs. 
+//! // `.and` consume the inputs and `.and_clone()` accepts reference and will do clone on inputs.
 //! let bitvector4 = bitvector & bitvector2;
 //! // ofcourse you can just use bit-and operator on bitvectors, it will also consumes the inputs.
 //! assert_eq!(bitvector3, bitvector4);
@@ -165,6 +165,14 @@ fn set_bit(flag: bool, bytes: u64, offset: u32) -> u64 {
 
 impl BitVector {
     /// Create a empty bitvector with `nbits` initial elements.
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector = BitVector::zeros(10);
+    /// assert_eq!(bitvector.capacity(), 10);
+    /// ```
     pub fn zeros(nbits: usize) -> Self {
         let (len, bytes, bits) = bit_to_len(nbits);
         let len = if bytes > 0 || bits > 0 { len + 1 } else { len };
@@ -196,13 +204,68 @@ impl BitVector {
         }
     }
 
-    /// max number of elements that this bitvector can have
-    /// 
+    /// Create a bitvector from an Iterator of bool.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector = BitVector::from_iterator((0..10).map(|x| x % 2 == 0));
+    /// assert_eq!(bitvector.capacity(), 10);
+    /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), vec![true, false, true, false, true, false, true, false, true, false]);
+    ///
+    /// let bitvector = BitVector::from_iterator((0..1000).map(|x| x < 50));
+    /// assert_eq!(bitvector.capacity(), 1000);
+    /// assert_eq!(bitvector.get(49), Some(true));
+    /// assert_eq!(bitvector.get(50), Some(false));
+    /// assert_eq!(bitvector.get(999), Some(false));
+    /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), (0..1000).map(|x| x<50).collect::<Vec<bool>>());
+    /// ```
+    pub fn from_iterator<I: Iterator<Item = bool>>(mut i: I) -> Self {
+        // FIXME: any better implementation?
+        let mut storage = Vec::new();
+        let mut current_slice = [0u64; 8];
+        let mut nbits = 0;
+        while let Some(b) = i.next() {
+            if b {
+                current_slice[nbits / 64] |= 1 << (u64::BITS - (nbits%64) as u32 - 1);
+            }
+            println!("{}, {:?}", nbits, current_slice);
+            nbits += 1;
+            if nbits % 512 == 0 {
+                storage.push(BitContainer::from_slice_unaligned(&current_slice));
+                current_slice = [0u64; 8];
+            }
+        }
+        if nbits % 512 > 0 {
+            storage.push(BitContainer::from_slice_unaligned(&current_slice));
+        }
+        Self { storage, nbits }
+    }
+
+    /// Max number of elements that this bitvector can have.
+    ///
     /// To get the number of elements, use `count`
-    pub fn capacity(&self) -> usize { self.nbits }
+    pub fn capacity(&self) -> usize {
+        self.nbits
+    }
 
     /// Shrink the vector to `length`. All elements between [length .. self.capacity()] will be removed.
     /// Panic if given `length` larger than current length.
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let mut bitvector = BitVector::ones(100);
+    /// assert_eq!(bitvector.capacity(), 100);
+    /// bitvector.shrink_to(10);
+    /// assert_eq!(bitvector.capacity(), 10);
+    /// // Now only contains [0 ..= 9]
+    /// assert_eq!(bitvector.get(9), Some(true));
+    /// assert_eq!(bitvector.get(10), None);
+    /// ```
     pub fn shrink_to(&mut self, length: usize) {
         if length < self.nbits {
             let (i, bytes, bits) = bit_to_len(length);
@@ -224,12 +287,28 @@ impl BitVector {
             self.storage = storage;
             self.nbits = length;
         } else {
-            panic!("require shrinked size {} < current size {}", length, self.nbits);
+            panic!(
+                "require shrinked size {} < current size {}",
+                length, self.nbits
+            );
         }
     }
 
     /// Remove or add `index` to the set.
     /// If index > self.capacity, the bitvector will be expanded to `index`.
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let mut bitvector = BitVector::zeros(10);
+    /// assert_eq!(bitvector.capacity(), 10);
+    /// bitvector.set(15, true);  
+    /// // now 15 has been added to the set, its total capacity is 16.
+    /// assert_eq!(bitvector.capacity(), 16);
+    /// assert_eq!(bitvector.get(15), Some(true));
+    /// assert_eq!(bitvector.get(14), Some(false));
+    /// ```
     pub fn set(&mut self, index: usize, flag: bool) {
         let (i, bytes, bits) = bit_to_len(index);
         if self.nbits <= index {
@@ -244,9 +323,17 @@ impl BitVector {
     }
 
     /// Check if `index` exists in current set.
-    /// If exists, return `Some(true)`
-    /// If index < current.capacity and element doesn't exist, return `Some(false)`.
-    /// If index >= current.capacity, return `None`.
+    ///
+    /// * If exists, return `Some(true)`
+    /// * If index < current.capacity and element doesn't exist, return `Some(false)`.
+    /// * If index >= current.capacity, return `None`.
+    ///
+    /// Examlpe:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// ```
     pub fn get(&self, index: usize) -> Option<bool> {
         if self.nbits <= index {
             None
@@ -257,8 +344,9 @@ impl BitVector {
     }
 
     /// Directly return a `bool` instead of an `Option`
-    /// If exists, return `true`
-    /// If doesn't exist or index >= current.capacity, retun `false`
+    ///
+    /// * If exists, return `true`
+    /// * If doesn't exist or index >= current.capacity, retun `false`
     ///
     /// equals to `self.get(index).unwrap_or(false)`
     pub fn get_unchecked(&self, index: usize) -> bool {
@@ -282,7 +370,8 @@ impl BitVector {
     /// A = [1,2,3], B = [2,4,5]
     /// A\B = [1,3]
     /// ```
-    /// also notice that 
+    ///
+    /// also notice that
     ///
     /// ```text
     /// A.difference(B) & B.difference(A) == A ^ B
@@ -350,15 +439,45 @@ impl BitVector {
         !self.any()
     }
 
-    /// return true if set is empty.
-    /// totally the same with `self.none()`
+    /// Return true if set is empty.
+    /// Totally the same with `self.none()`
     pub fn is_empty(&self) -> bool {
         !self.any()
     }
 
-    /// only compare the first `bits` instead of the whole bitvector.
+    /// Consume self and generate a `Vec<bool>` with length == self.capacity().
+    ///
+    /// Example:
     /// 
-    /// require self and other are both no shorter than `bits`.
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector = BitVector::from_iterator((0..10).map(|i| i % 3 == 0));
+    /// let bool_vec = bitvector.into_bools();
+    /// assert_eq!(bool_vec, vec![true, false, false, true, false, false, true, false, false, true])
+    /// ```
+    pub fn into_bools(self) -> Vec<bool> {
+        self.into()
+    }
+
+    /// Consume self and geterate a `Vec<usize>` which only contains the number exists in this set.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    /// 
+    /// let bitvector = BitVector::from_iterator((0..10).map(|i| i%3 == 0));
+    /// let usize_vec = bitvector.into_usizes();
+    /// assert_eq!(usize_vec, vec![0,3,6,9]);
+    /// ```
+    pub fn into_usizes(self) -> Vec<usize> {
+        self.into()
+    }
+
+    /// Only compare the first `bits` instead of the whole bitvector.
+    ///
+    /// Require self and other are both no shorter than `bits`.
     pub fn eq_left(&self, other: &Self, bits: usize) -> bool {
         assert!(self.nbits >= bits && other.nbits >= bits);
         let (i, bytes, bits) = bit_to_len(bits);
@@ -380,6 +499,43 @@ impl BitVector {
         } else {
             r
         }
+    }
+}
+
+impl Into<Vec<bool>> for BitVector {
+    fn into(self) -> Vec<bool> {
+        self.storage
+            .into_iter()
+            .flat_map(|x| {
+                let mut slice = [0u64; 8];
+                // Packed SIMD does not provide any API to directly transform x into a slice
+                // x.extract will consume itself which makes remaining data unaccessable.
+                x.write_to_slice_aligned(&mut slice);
+                slice
+            })
+            .flat_map(|x| (0..u64::BITS).map(move |i| (x >> (u64::BITS - i - 1)) & 1 > 0))
+            .take(self.nbits)
+            .collect()
+    }
+}
+
+impl Into<Vec<usize>> for BitVector {
+    fn into(self) -> Vec<usize> {
+        self.storage
+            .into_iter()
+            .flat_map(|x| {
+                let mut slice = [0u64; 8];
+                // Packed SIMD does not provide any API to directly transform x into a slice
+                // x.extract will consume itself which makes remaining data unaccessable.
+                x.write_to_slice_aligned(&mut slice);
+                slice
+            })
+            .flat_map(|x| (0..u64::BITS).map(move |i| (x >> (u64::BITS - i - 1)) & 1 > 0))
+            .take(self.nbits)
+            .enumerate()
+            .filter(|(_, b)| *b)
+            .map(|(i, _)| i)
+            .collect()
     }
 }
 

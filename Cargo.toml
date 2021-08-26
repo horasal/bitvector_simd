@@ -8,7 +8,6 @@ homepage = "https://github.com/horasal/bitvector_simd"
 licence = "MIT"
 readme = "README.md"
 repository = "https://github.com/horasal/bitvector_simd"
-license-file = "LICENSE"
 keywords = ["bitvector"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

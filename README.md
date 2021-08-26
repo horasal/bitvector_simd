@@ -27,7 +27,7 @@ assert_eq!(new_bitvec, new_bitvec2);
 
 ## Performance 
 
-Compared with
+Compared on Apple MacMini2021(M1 Chip), aginst:
 
 * [bit\_vec 0.6.3](https://docs.rs/bit-vec/0.6.3/bit_vec/index.html)
 * [bitvec 0.22.3](https://docs.rs/bitvec/0.22.3/bitvec/index.html)
