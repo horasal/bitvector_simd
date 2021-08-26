@@ -99,7 +99,7 @@ macro_rules! impl_operation {
             .map(|(a, b)| a $op b)
             .collect();
         Self {
-            storage: storage,
+            storage,
             nbits: self.nbits,
         }
         }
@@ -113,7 +113,7 @@ macro_rules! impl_operation {
             .map(|(a, b)| a $op b)
             .collect();
         Self {
-            storage: storage,
+            storage,
             nbits: self.nbits,
         }
         }
@@ -177,10 +177,7 @@ impl BitVector {
         let (len, bytes, bits) = bit_to_len(nbits);
         let len = if bytes > 0 || bits > 0 { len + 1 } else { len };
         let storage = (0..len).map(|_| BitContainer::splat(0)).collect();
-        Self {
-            storage: storage,
-            nbits: nbits,
-        }
+        Self { storage, nbits }
     }
 
     /// Create a bitvector containing all 0 .. nbits elements.
@@ -198,10 +195,7 @@ impl BitVector {
             assert_eq!(slice.len(), 8);
             storage.push(BitContainer::from_slice_unaligned(&slice));
         }
-        Self {
-            storage: storage,
-            nbits: nbits,
-        }
+        Self { storage, nbits }
     }
 
     /// Create a bitvector from an Iterator of bool.
@@ -222,14 +216,14 @@ impl BitVector {
     /// assert_eq!(bitvector.get(999), Some(false));
     /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), (0..1000).map(|x| x<50).collect::<Vec<bool>>());
     /// ```
-    pub fn from_iterator<I: Iterator<Item = bool>>(mut i: I) -> Self {
+    pub fn from_iterator<I: Iterator<Item = bool>>(i: I) -> Self {
         // FIXME: any better implementation?
         let mut storage = Vec::new();
         let mut current_slice = [0u64; 8];
         let mut nbits = 0;
-        while let Some(b) = i.next() {
+        for b in i {
             if b {
-                current_slice[nbits / 64] |= 1 << (u64::BITS - (nbits%64) as u32 - 1);
+                current_slice[nbits / 64] |= 1 << (u64::BITS - (nbits % 64) as u32 - 1);
             }
             nbits += 1;
             if nbits % 512 == 0 {
@@ -389,7 +383,7 @@ impl BitVector {
     ///
     /// If your bitvector have capacity `1_000` and contains `[1,5]`,
     /// after inverse it will contains `0, 2..=4, 6..=999`
-    pub fn not(self) -> Self {
+    pub fn inverse(self) -> Self {
         let (i, bytes, bits) = bit_to_len(self.nbits);
         let mut storage = self.storage.into_iter().map(|x| !x).collect::<Vec<_>>();
         if bytes > 0 || bits > 0 {
@@ -408,7 +402,7 @@ impl BitVector {
         }
 
         Self {
-            storage: storage,
+            storage,
             nbits: self.nbits,
         }
     }
@@ -447,7 +441,7 @@ impl BitVector {
     /// Consume self and generate a `Vec<bool>` with length == self.capacity().
     ///
     /// Example:
-    /// 
+    ///
     /// ```rust
     /// use bitvector_simd::BitVector;
     ///
@@ -465,7 +459,7 @@ impl BitVector {
     ///
     /// ```rust
     /// use bitvector_simd::BitVector;
-    /// 
+    ///
     /// let bitvector = BitVector::from_iterator((0..10).map(|i| i%3 == 0));
     /// let usize_vec = bitvector.into_usizes();
     /// assert_eq!(usize_vec, vec![0,3,6,9]);
@@ -500,15 +494,15 @@ impl BitVector {
     }
 }
 
-impl<I:Iterator<Item=bool>> From<I> for BitVector {
+impl<I: Iterator<Item = bool>> From<I> for BitVector {
     fn from(i: I) -> Self {
         Self::from_iterator(i)
     }
 }
 
-impl Into<Vec<bool>> for BitVector {
-    fn into(self) -> Vec<bool> {
-        self.storage
+impl From<BitVector> for Vec<bool> {
+    fn from(v: BitVector) -> Self {
+        v.storage
             .into_iter()
             .flat_map(|x| {
                 let mut slice = [0u64; 8];
@@ -518,14 +512,14 @@ impl Into<Vec<bool>> for BitVector {
                 slice
             })
             .flat_map(|x| (0..u64::BITS).map(move |i| (x >> (u64::BITS - i - 1)) & 1 > 0))
-            .take(self.nbits)
+            .take(v.nbits)
             .collect()
     }
 }
 
-impl Into<Vec<usize>> for BitVector {
-    fn into(self) -> Vec<usize> {
-        self.storage
+impl From<BitVector> for Vec<usize> {
+    fn from(v: BitVector) -> Self {
+        v.storage
             .into_iter()
             .flat_map(|x| {
                 let mut slice = [0u64; 8];
@@ -535,7 +529,7 @@ impl Into<Vec<usize>> for BitVector {
                 slice
             })
             .flat_map(|x| (0..u64::BITS).map(move |i| (x >> (u64::BITS - i - 1)) & 1 > 0))
-            .take(self.nbits)
+            .take(v.nbits)
             .enumerate()
             .filter(|(_, b)| *b)
             .map(|(i, _)| i)
@@ -610,7 +604,7 @@ impl BitXor for BitVector {
 impl Not for BitVector {
     type Output = Self;
     fn not(self) -> Self::Output {
-        self.not()
+        self.inverse()
     }
 }
 
