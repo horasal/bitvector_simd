@@ -46,6 +46,11 @@
 //! let bitvector4 = bitvector & bitvector2;
 //! // ofcourse you can just use bit-and operator on bitvectors, it will also consumes the inputs.
 //! assert_eq!(bitvector3, bitvector4);
+//! // A bitvector can also be constructed from a collection of bool, or a colluction of integer:
+//! let bitvector: BitVector = (0 .. 10).map(|x| x%2 == 0).into();
+//! let bitvector2: BitVector = (0 .. 10).map(|x| x%3 == 0).into();
+//! let bitvector3 = BitVector::from_bool_iterator((0..10).map(|x| x%6 == 0));
+//! assert_eq!(bitvector & bitvector2, bitvector3)
 //! ```
 //!
 //! ## Performance
@@ -205,18 +210,18 @@ impl BitVector {
     /// ```rust
     /// use bitvector_simd::BitVector;
     ///
-    /// let bitvector = BitVector::from_iterator((0..10).map(|x| x % 2 == 0));
+    /// let bitvector = BitVector::from_bool_iterator((0..10).map(|x| x % 2 == 0));
     /// assert_eq!(bitvector.capacity(), 10);
     /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), vec![true, false, true, false, true, false, true, false, true, false]);
     ///
-    /// let bitvector = BitVector::from_iterator((0..1000).map(|x| x < 50));
+    /// let bitvector = BitVector::from_bool_iterator((0..1000).map(|x| x < 50));
     /// assert_eq!(bitvector.capacity(), 1000);
     /// assert_eq!(bitvector.get(49), Some(true));
     /// assert_eq!(bitvector.get(50), Some(false));
     /// assert_eq!(bitvector.get(999), Some(false));
     /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), (0..1000).map(|x| x<50).collect::<Vec<bool>>());
     /// ```
-    pub fn from_iterator<I: Iterator<Item = bool>>(i: I) -> Self {
+    pub fn from_bool_iterator<I: Iterator<Item = bool>>(i: I) -> Self {
         // FIXME: any better implementation?
         let mut storage = Vec::new();
         let mut current_slice = [0u64; 8];
@@ -235,6 +240,24 @@ impl BitVector {
             storage.push(BitContainer::from_slice_unaligned(&current_slice));
         }
         Self { storage, nbits }
+    }
+
+    /// Initialize from a set of integers.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector = BitVector::from_slice(&[0,5,9]);
+    /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), vec![true, false, false, false, false, true, false, false, false, true]);
+    /// ```
+    pub fn from_slice(slice: &[usize]) -> Self {
+        let mut bv = BitVector::zeros(slice.len());
+        for i in slice {
+            bv.set(*i, true);
+        }
+        bv
     }
 
     /// Max number of elements that this bitvector can have.
@@ -326,6 +349,11 @@ impl BitVector {
     /// ```rust
     /// use bitvector_simd::BitVector;
     ///
+    /// let bitvector : BitVector = (0 .. 15).map(|x| x%3 == 0).into();
+    /// assert_eq!(bitvector.get(3), Some(true));
+    /// assert_eq!(bitvector.get(5), Some(false));
+    /// assert_eq!(bitvector.get(14), Some(false));
+    /// assert_eq!(bitvector.get(15), None);
     /// ```
     pub fn get(&self, index: usize) -> Option<bool> {
         if self.nbits <= index {
@@ -338,10 +366,21 @@ impl BitVector {
 
     /// Directly return a `bool` instead of an `Option`
     ///
-    /// * If exists, return `true`
-    /// * If doesn't exist or index >= current.capacity, retun `false`
+    /// * If exists, return `true`.
+    /// * If doesn't exist, return false.
+    /// * If index >= current.capacity, panic.
     ///
-    /// equals to `self.get(index).unwrap_or(false)`
+    ///
+    /// Examlpe:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector : BitVector = (0 .. 15).map(|x| x%3 == 0).into();
+    /// assert_eq!(bitvector.get_unchecked(3), true);
+    /// assert_eq!(bitvector.get_unchecked(5), false);
+    /// assert_eq!(bitvector.get_unchecked(14), false);
+    /// ```
     pub fn get_unchecked(&self, index: usize) -> bool {
         if self.nbits <= index {
             panic!("index out of bounds {} > {}", index, self.nbits);
@@ -445,7 +484,7 @@ impl BitVector {
     /// ```rust
     /// use bitvector_simd::BitVector;
     ///
-    /// let bitvector = BitVector::from_iterator((0..10).map(|i| i % 3 == 0));
+    /// let bitvector = BitVector::from_bool_iterator((0..10).map(|i| i % 3 == 0));
     /// let bool_vec = bitvector.into_bools();
     /// assert_eq!(bool_vec, vec![true, false, false, true, false, false, true, false, false, true])
     /// ```
@@ -460,7 +499,7 @@ impl BitVector {
     /// ```rust
     /// use bitvector_simd::BitVector;
     ///
-    /// let bitvector = BitVector::from_iterator((0..10).map(|i| i%3 == 0));
+    /// let bitvector = BitVector::from_bool_iterator((0..10).map(|i| i%3 == 0));
     /// let usize_vec = bitvector.into_usizes();
     /// assert_eq!(usize_vec, vec![0,3,6,9]);
     /// ```
@@ -496,7 +535,7 @@ impl BitVector {
 
 impl<I: Iterator<Item = bool>> From<I> for BitVector {
     fn from(i: I) -> Self {
-        Self::from_iterator(i)
+        Self::from_bool_iterator(i)
     }
 }
 
