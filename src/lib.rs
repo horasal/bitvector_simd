@@ -510,6 +510,20 @@ impl BitVector {
     /// Only compare the first `bits` instead of the whole bitvector.
     ///
     /// Require self and other are both no shorter than `bits`.
+    ///
+    /// Example:
+    /// 
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    /// 
+    /// let bitvector = BitVector::from_slice(&[1,3,5,7]);
+    /// let bitvector2 = BitVector::from_slice(&[1,3,5,9,10,15]);
+    /// // compare first 6 bits (0..=5)
+    /// assert!(bitvector.eq_left(&bitvector2, 6));
+    /// // compare first 8 bits (0..=7)
+    /// assert!(!bitvector.eq_left(&bitvector2, 8));
+    /// // any bits > 8 call panic.
+    /// ```
     pub fn eq_left(&self, other: &Self, bits: usize) -> bool {
         assert!(self.nbits >= bits && other.nbits >= bits);
         let (i, bytes, bits) = bit_to_len(bits);

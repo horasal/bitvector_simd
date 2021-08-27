@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "bitvector_simd"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "bit-vec",
  "bitvec",
