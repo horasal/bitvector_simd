@@ -2,7 +2,7 @@
 name = "bitvector_simd"
 description = "bitvector implemented with Packed SIMD 2"
 authors = ["Horasal"]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2018"
 homepage = "https://github.com/horasal/bitvector_simd"
 license = "MIT"
