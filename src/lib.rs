@@ -228,7 +228,7 @@ impl BitVector {
         let mut nbits = 0;
         for b in i {
             if b {
-                current_slice[nbits / 64] |= 1 << (u64::BITS - (nbits % 64) as u32 - 1);
+                current_slice[nbits % 512 / 64] |= 1 << (u64::BITS - (nbits % 64) as u32 - 1);
             }
             nbits += 1;
             if nbits % 512 == 0 {
@@ -406,13 +406,25 @@ impl BitVector {
     /// also notice that
     ///
     /// ```text
-    /// A.difference(B) & B.difference(A) == A ^ B
+    /// A.difference(B) | B.difference(A) == A ^ B
+    /// ```
+    /// 
+    /// Example:
+    /// 
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    /// 
+    /// let bitvector: BitVector = (0 .. 5_000).map(|x| x % 2 == 0).into();
+    /// let bitvector2 : BitVector = (0 .. 5_000).map(|x| x % 3 == 0).into();
+    /// assert_eq!(bitvector.difference_cloned(&bitvector2) | bitvector2.difference_cloned(&bitvector), bitvector.xor_cloned(&bitvector2));
+    /// let bitvector3 : BitVector = (0 .. 5_000).map(|x| x % 2 == 0 && x % 3 != 0).into();
+    /// assert_eq!(bitvector.difference(bitvector2), bitvector3);
     /// ```
     pub fn difference(self, other: Self) -> Self {
         self.and(other.not())
     }
 
-    pub fn difference_clone(&self, other: &Self) -> Self {
+    pub fn difference_cloned(&self, other: &Self) -> Self {
         // FIXME: This implementation has one extra clone
         self.and_cloned(&other.clone().not())
     }
@@ -447,6 +459,18 @@ impl BitVector {
     }
 
     /// Count the number of elements existing in this bitvector.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    /// 
+    /// let bitvector: BitVector = (0..10_000).map(|x| x%2==0).into();
+    /// assert_eq!(bitvector.count(), 5000);
+    ///
+    /// let bitvector: BitVector = (0..30_000).map(|x| x%3==0).into();
+    /// assert_eq!(bitvector.count(), 10_000);
+    /// ```
     pub fn count(&self) -> usize {
         self.storage
             .iter()
