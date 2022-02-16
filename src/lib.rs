@@ -27,6 +27,7 @@
 //! ```rust
 //! use bitvector_simd::BitVector;
 //!
+//! let _ = BitVector::ones(1_792); //create a set containing 0 ..= 1791
 //! let mut bitvector = BitVector::ones(1_000); //create a set containing 0 ..= 999
 //! bitvector.set(1_999, true); // add 1999 to the set, bitvector will be automatically expanded
 //! bitvector.set(500, false); // delete 500 from the set
@@ -194,7 +195,8 @@ impl BitVector {
         if bytes > 0 || bits > 0 {
             let slice = (0..bytes as u64)
                 .map(|_| u64::MAX)
-                .chain([(u64::MAX >> (u64::BITS - bits as u32) << (u64::BITS - bits as u32))])
+                // bits may be 0, we should use checked_str to avoid panic
+                .chain([(u64::MAX.checked_shr(u64::BITS - bits as u32).unwrap_or(0).checked_shl(u64::BITS - bits as u32).unwrap_or(0))])
                 .chain((0..(512 / u64::BITS) - bytes as u32 - 1).map(|_| 0))
                 .collect::<Vec<_>>();
             assert_eq!(slice.len(), 8);
