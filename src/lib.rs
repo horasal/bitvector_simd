@@ -60,7 +60,6 @@
 //!
 //! Benchmarks on author's environment show that it does not outperformance existing bitvector
 //! libraries (too much). It is just OK to use existing ones such like [bit_vec](https://docs.rs/bit-vec/0.6.3/bit_vec/).
-
 use std::{
     fmt::Display,
     ops::{BitAnd, BitOr, BitXor, Index, Not},
@@ -587,7 +586,7 @@ impl From<BitVector> for Vec<bool> {
                 let mut slice = [0u64; 8];
                 // Packed SIMD does not provide any API to directly transform x into a slice
                 // x.extract will consume itself which makes remaining data unaccessable.
-                x.write_to_slice_aligned(&mut slice);
+                x.write_to_slice_unaligned(&mut slice);
                 slice
             })
             .flat_map(|x| (0..u64::BITS).map(move |i| (x >> (u64::BITS - i - 1)) & 1 > 0))
@@ -604,7 +603,7 @@ impl From<BitVector> for Vec<usize> {
                 let mut slice = [0u64; 8];
                 // Packed SIMD does not provide any API to directly transform x into a slice
                 // x.extract will consume itself which makes remaining data unaccessable.
-                x.write_to_slice_aligned(&mut slice);
+                x.write_to_slice_unaligned(&mut slice);
                 slice
             })
             .flat_map(|x| (0..u64::BITS).map(move |i| (x >> (u64::BITS - i - 1)) & 1 > 0))
