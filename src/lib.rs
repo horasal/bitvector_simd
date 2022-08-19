@@ -195,7 +195,11 @@ impl BitVector {
             let slice = (0..bytes as u64)
                 .map(|_| u64::MAX)
                 // bits may be 0, we should use checked_str to avoid panic
-                .chain([(u64::MAX.checked_shr(u64::BITS - bits as u32).unwrap_or(0).checked_shl(u64::BITS - bits as u32).unwrap_or(0))])
+                .chain([(u64::MAX
+                    .checked_shr(u64::BITS - bits as u32)
+                    .unwrap_or(0)
+                    .checked_shl(u64::BITS - bits as u32)
+                    .unwrap_or(0))])
                 .chain((0..(512 / u64::BITS) - bytes as u32 - 1).map(|_| 0))
                 .collect::<Vec<_>>();
             assert_eq!(slice.len(), 8);
@@ -245,6 +249,8 @@ impl BitVector {
 
     /// Initialize from a set of integers.
     ///
+    /// This API is deprecated in favor of `from_index_slice`.
+    ///
     /// Example:
     ///
     /// ```rust
@@ -253,10 +259,56 @@ impl BitVector {
     /// let bitvector = BitVector::from_slice(&[0,5,9]);
     /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), vec![true, false, false, false, false, true, false, false, false, true]);
     /// ```
+    #[deprecated]
     pub fn from_slice(slice: &[usize]) -> Self {
         let mut bv = BitVector::zeros(slice.len());
+        let mut max = 0;
         for i in slice {
+            max = max.max(*i);
             bv.set(*i, true);
+        }
+        bv.shrink_to(max + 1);
+        bv
+    }
+
+    /// Initialize from a set of integers.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector = BitVector::from_index_slice(&[0,5,9]);
+    /// assert_eq!(<BitVector as Into<Vec<bool>>>::into(bitvector), vec![true, false, false, false, false, true, false, false, false, true]);
+    /// ```
+    pub fn from_index_slice(slice: &[usize]) -> Self {
+        let mut bv = BitVector::zeros(slice.len());
+        let mut max = 0;
+        for i in slice {
+            max = max.max(*i);
+            bv.set(*i, true);
+        }
+        // when slice contains duplicated indices, `bv` may use more memory than expected.
+        // e.g. for `[1usize,2048]`, we actually only need one `BitContainer` (or 1bit in fact) to store it.
+        // This approach is 2% faster than setting `nbits` to `slice.max()` or `0`.
+        bv.shrink_to(max + 1);
+        bv
+    }
+
+    /// Initialize from a set of bools.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use bitvector_simd::BitVector;
+    ///
+    /// let bitvector = BitVector::from_bool_slice(&[true, false, true, false, false, false, true]);
+    /// assert_eq!(<BitVector as Into<Vec<usize>>>::into(bitvector), vec![0, 2, 6]);
+    /// ```
+    pub fn from_bool_slice(slice: &[bool]) -> Self {
+        let mut bv = BitVector::zeros(slice.len());
+        for (i, v) in slice.iter().enumerate() {
+            bv.set(i, *v);
         }
         bv
     }
@@ -303,6 +355,7 @@ impl BitVector {
             }
             self.storage = storage;
             self.nbits = length;
+        } else if length == self.nbits {
         } else {
             panic!(
                 "require shrinked size {} < current size {}",
@@ -329,7 +382,8 @@ impl BitVector {
     pub fn set(&mut self, index: usize, flag: bool) {
         let (i, bytes, bits) = bit_to_len(index);
         if self.nbits <= index {
-            let i = if bytes > 0 || bits > 0 { i + 1 } else { i };
+            //let i = if bytes > 0 || bits > 0 { i + 1 } else { i };
+            let i = i + 1;
             self.storage
                 .extend((0..i - self.storage.len()).map(|_| BitContainer::splat(0)));
             self.nbits = index + 1;
@@ -409,12 +463,12 @@ impl BitVector {
     /// ```text
     /// A.difference(B) | B.difference(A) == A ^ B
     /// ```
-    /// 
+    ///
     /// Example:
-    /// 
+    ///
     /// ```rust
     /// use bitvector_simd::BitVector;
-    /// 
+    ///
     /// let bitvector: BitVector = (0 .. 5_000).map(|x| x % 2 == 0).into();
     /// let bitvector2 : BitVector = (0 .. 5_000).map(|x| x % 3 == 0).into();
     /// assert_eq!(bitvector.difference_cloned(&bitvector2) | bitvector2.difference_cloned(&bitvector), bitvector.xor_cloned(&bitvector2));
@@ -465,7 +519,7 @@ impl BitVector {
     ///
     /// ```rust
     /// use bitvector_simd::BitVector;
-    /// 
+    ///
     /// let bitvector: BitVector = (0..10_000).map(|x| x%2==0).into();
     /// assert_eq!(bitvector.count(), 5000);
     ///
@@ -537,12 +591,12 @@ impl BitVector {
     /// Require self and other are both no shorter than `bits`.
     ///
     /// Example:
-    /// 
+    ///
     /// ```rust
     /// use bitvector_simd::BitVector;
-    /// 
-    /// let bitvector = BitVector::from_slice(&[1,3,5,7]);
-    /// let bitvector2 = BitVector::from_slice(&[1,3,5,9,10,15]);
+    ///
+    /// let bitvector = BitVector::from_index_slice(&[1,3,5,7]);
+    /// let bitvector2 = BitVector::from_index_slice(&[1,3,5,9,10,15]);
     /// // compare first 6 bits (0..=5)
     /// assert!(bitvector.eq_left(&bitvector2, 6));
     /// // compare first 8 bits (0..=7)
@@ -810,6 +864,19 @@ fn test_bitvec_eq() {
     assert_ne!(bitvec, BitVector::ones(1000));
     bitvec.set(50, true);
     assert_eq!(bitvec, BitVector::ones(1000));
+}
+
+#[test]
+fn test_from_slice_consistence() {
+    let bitvec = BitVector::from_index_slice(&[0usize; 20480]);
+    assert_eq!(bitvec.capacity(), 1);
+    assert_eq!(bitvec.get(0), Some(true));
+    let slice = (0..5000).map(|x| x / 5).collect::<Vec<usize>>();
+    let bitvec = BitVector::from_index_slice(&slice);
+    assert_eq!(bitvec.capacity(), 1000);
+    assert_eq!(bitvec.count(), 1000);
+    assert_eq!(bitvec.get(0), Some(true));
+    assert_eq!(bitvec.get(999), Some(true));
 }
 
 #[test]
