@@ -1,4 +1,4 @@
-//! ## Bitvector implemented with [Packed SIMD 2](https://github.com/rust-lang/packed_simd)
+//! ## Bitvector implemented with [Packed SIMD](https://github.com/rust-lang/packed_simd)
 //!
 //! Bitvector represents numbers by the position of bits. For example, for the set $\{1,3,5\}$, we
 //! can represent it by a just a byte `010101000` -- the most left (high) bit represent if `0`
@@ -20,7 +20,7 @@
 //! operations as an operation on slices. Packed SIMD wraps all the low-level details for you -- no
 //! arch-specified code, no unsafe, just do what you've done on normal integer/floats.
 //!
-//! This crate uses Packed SIMD 2 to implement a basic bitvector.
+//! This crate uses Packed SIMD to implement a basic bitvector.
 //!
 //! ### Usage
 //!

@@ -1,10 +1,10 @@
 ## bitvector\_simd
 
-[![creates.io](https://img.shields.io/crates/v/bitvector-simd.svg)](https://crates.io/crates/bitvector_simd)
-[![docs.rs](https://docs.rs/bitvector_simd/badge.svg)](https://docs.rs/bitvector_simd/)
+[![crates.io](https://img.shields.io/crates/v/bitvector-simd.svg)](https://crates.io/crates/bitvector_simd)
+[![docs.rs](https://docs.rs/bitvector_simd/badge.svg)](https://docs.rs/bitvector_simd)
 
 
-A bitvector implemented with [Packed SIMD 2](https://rust-lang.github.io/packed_simd/packed_simd_2/).
+A bitvector implemented with [Packed SIMD](https://docs.rs/packed_simd).
 
 ## How to use
 
@@ -27,7 +27,7 @@ assert_eq!(new_bitvec, new_bitvec2);
 
 ## Performance 
 
-Compared on Apple MacMini2021(M1 Chip), aginst:
+Compared on Apple Mac Mini 2021 (M1 chip), against:
 
 * [bit\_vec 0.6.3](https://docs.rs/bit-vec/0.6.3/bit_vec/index.html)
 * [bitvec 0.22.3](https://docs.rs/bitvec/0.22.3/bitvec/index.html)
